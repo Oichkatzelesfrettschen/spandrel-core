@@ -36,6 +36,14 @@ from spandrel_core.likelihood import (
     compute_model_comparison,
 )
 
+# Cosmology utilities
+from spandrel_core.cosmology import (
+    FlatLambdaCDM,
+    luminosity_distance,
+    comoving_distance,
+    angular_diameter_distance,
+)
+
 # Constants module available as submodule
 from spandrel_core import constants
 
@@ -54,6 +62,11 @@ __all__ = [
     "EvolutionParams",
     "SpandrelLikelihood",
     "compute_model_comparison",
+    # Cosmology
+    "FlatLambdaCDM",
+    "luminosity_distance",
+    "comoving_distance",
+    "angular_diameter_distance",
     # Submodules
     "constants",
 ]
