@@ -9,11 +9,28 @@ This module is designed for use with emcee or cobaya samplers.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 from scipy.integrate import quad
 from scipy.stats import norm
+
+
+def chi2_diagonal(residuals: np.ndarray, sigma: np.ndarray) -> float:
+    """Compute χ² for diagonal Gaussian errors."""
+    r = np.asarray(residuals, dtype=float)
+    s = np.asarray(sigma, dtype=float)
+    return float(np.sum((r / s) ** 2))
+
+
+def gaussian_log_likelihood(residuals: np.ndarray, variance: np.ndarray) -> float:
+    """Gaussian log-likelihood for diagonal covariance.
+
+    Returns: -0.5 * Σ[ r²/var + ln(2π var) ].
+    """
+    r = np.asarray(residuals, dtype=float)
+    v = np.asarray(variance, dtype=float)
+    return float(-0.5 * np.sum(r**2 / v + np.log(2 * np.pi * v)))
 
 
 @dataclass
@@ -134,8 +151,6 @@ class SpandrelLikelihood:
         def E_inv(zp):
             """1/E(z) for integration."""
             Ode = 1.0 - cosmo.Om
-            # w(z) = w0 + wa * z/(1+z)
-            w_z = cosmo.w0 + cosmo.wa * zp / (1 + zp)
             de_term = (
                 Ode
                 * (1 + zp) ** (3 * (1 + cosmo.w0 + cosmo.wa))
@@ -157,7 +172,7 @@ class SpandrelLikelihood:
         with np.errstate(divide="ignore", invalid="ignore"):
             mu = np.where(dl > 0, 5 * np.log10(dl) + 25, 0)
 
-        return mu
+        return cast(np.ndarray, mu)
 
     def standardized_magnitude(
         self, std: StandardizationParams, evo: Optional[EvolutionParams] = None
@@ -177,7 +192,7 @@ class SpandrelLikelihood:
         if evo is not None:
             M_std += evo.dM_dz * self.z
 
-        return M_std
+        return cast(np.ndarray, M_std)
 
     def log_likelihood_baseline(self, theta: np.ndarray) -> float:
         """
@@ -294,14 +309,14 @@ class SpandrelLikelihood:
         # wa: Gaussian centered on zero
         log_p += norm.logpdf(wa, loc=0, scale=1.0)
 
-        return log_p
+        return float(log_p)
 
     def log_prior_spandrel(self, theta: np.ndarray) -> float:
         """Priors for Spandrel model parameters."""
         (M0, alpha, beta, gamma, sigma_int, dM_dz, dx1_dz, dc_dz, H0, Om, w0, wa) = theta
 
         # Start with baseline priors
-        baseline_theta = [M0, alpha, beta, gamma, sigma_int, H0, Om, w0, wa]
+        baseline_theta = np.array([M0, alpha, beta, gamma, sigma_int, H0, Om, w0, wa], dtype=float)
         log_p = self.log_prior_baseline(baseline_theta)
 
         if not np.isfinite(log_p):
@@ -312,7 +327,7 @@ class SpandrelLikelihood:
         log_p += norm.logpdf(dx1_dz, loc=0, scale=0.5)
         log_p += norm.logpdf(dc_dz, loc=0, scale=0.1)
 
-        return log_p
+        return float(log_p)
 
     def log_posterior_baseline(self, theta: np.ndarray) -> float:
         """Log posterior for baseline model."""
@@ -331,7 +346,7 @@ class SpandrelLikelihood:
 
 def compute_model_comparison(
     likelihood: SpandrelLikelihood, baseline_samples: np.ndarray, spandrel_samples: np.ndarray
-) -> Dict:
+) -> dict[str, Any]:
     """
     Compute model comparison statistics between baseline and Spandrel.
 
@@ -343,7 +358,7 @@ def compute_model_comparison(
     Returns:
         Dictionary with comparison statistics
     """
-    results = {}
+    results: dict[str, Any] = {}
 
     # Maximum likelihood estimates
     baseline_logliks = np.array([likelihood.log_likelihood_baseline(s) for s in baseline_samples])
@@ -438,8 +453,11 @@ if __name__ == "__main__":
     )
 
     # Test likelihood evaluation
-    theta_baseline = [-19.3, 0.14, 3.1, 0.05, 0.1, 70.0, 0.3, -1.0, 0.0]
-    theta_spandrel = [-19.3, 0.14, 3.1, 0.05, 0.1, 0.0, 0.0, 0.0, 70.0, 0.3, -1.0, 0.0]
+    theta_baseline = np.array([-19.3, 0.14, 3.1, 0.05, 0.1, 70.0, 0.3, -1.0, 0.0], dtype=float)
+    theta_spandrel = np.array(
+        [-19.3, 0.14, 3.1, 0.05, 0.1, 0.0, 0.0, 0.0, 70.0, 0.3, -1.0, 0.0],
+        dtype=float,
+    )
 
     loglik_base = lik.log_likelihood_baseline(theta_baseline)
     loglik_span = lik.log_likelihood_spandrel(theta_spandrel)

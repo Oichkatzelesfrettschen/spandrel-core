@@ -18,11 +18,18 @@ Usage:
 __version__ = "0.1.0"
 __author__ = "Deirikr Jaiusadastra Afrauthihinngreygaard"
 
-# Core data structures
+# Cosmology utilities
+from spandrel_core import constants
+from spandrel_core.cosmology import (
+    FlatLambdaCDM,
+    angular_diameter_distance,
+    comoving_distance,
+    luminosity_distance,
+)
 from spandrel_core.data import (
-    SNDataset,
     PantheonPlusLoader,
     SimulatedDataLoader,
+    SNDataset,
     split_by_host_mass,
     split_by_redshift,
 )
@@ -30,22 +37,11 @@ from spandrel_core.data import (
 # Likelihood classes
 from spandrel_core.likelihood import (
     CosmologyParams,
-    StandardizationParams,
     EvolutionParams,
     SpandrelLikelihood,
+    StandardizationParams,
     compute_model_comparison,
 )
-
-# Cosmology utilities
-from spandrel_core.cosmology import (
-    FlatLambdaCDM,
-    luminosity_distance,
-    comoving_distance,
-    angular_diameter_distance,
-)
-
-# Constants module available as submodule
-from spandrel_core import constants
 
 __all__ = [
     # Version

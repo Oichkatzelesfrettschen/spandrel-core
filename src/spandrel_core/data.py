@@ -13,7 +13,7 @@ Also loads host galaxy properties from associated catalogs.
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -145,7 +145,7 @@ class PantheonPlusLoader:
                 break
 
         if host_mass_col is None:
-            warnings.warn("No host mass column found; using placeholder values")
+            warnings.warn("No host mass column found; using placeholder values", stacklevel=2)
             host_mass = np.full(len(df), 10.5)
             host_mass_err = np.full(len(df), 0.5)
         else:
@@ -185,9 +185,53 @@ class PantheonPlusLoader:
                 cov = self._load_covariance(cov_file, len(dataset))
                 dataset.cov_sys = cov
             except Exception as e:
-                warnings.warn(f"Could not load covariance: {e}")
+                warnings.warn(f"Could not load covariance: {e}", stacklevel=2)
 
         return dataset
+
+    def load_distance_modulus(
+        self, *, z_min: float = 0.001, z_max: float = 2.5
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
+        """Load Pantheon+SH0ES distance modulus columns (MU_SH0ES*).
+
+        This is the canonical loader for analyses that work directly in the
+        (z, μ, σ_μ) space, where μ is the (Cepheid-calibrated) distance modulus.
+
+        Returns:
+            (z_hd, mu, mu_err, dataframe) after basic quality cuts.
+        """
+        data_file = self.data_dir / "Pantheon+SH0ES.dat"
+        if not data_file.exists():
+            raise FileNotFoundError(
+                f"Pantheon+ data file not found: {data_file}\n" f"Download from: {self.DATA_URL}"
+            )
+
+        df = pd.read_csv(data_file, sep=r"\s+", comment="#")
+        required = ["zHD", "MU_SH0ES", "MU_SH0ES_ERR_DIAG"]
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing columns in Pantheon+SH0ES file: {missing}")
+
+        z = df["zHD"].values
+        mu = df["MU_SH0ES"].values
+        mu_err = df["MU_SH0ES_ERR_DIAG"].values
+
+        mask = (
+            (z >= z_min)
+            & (z <= z_max)
+            & (mu > 0)
+            & np.isfinite(mu)
+            & np.isfinite(mu_err)
+            & (mu_err > 0)
+        )
+        df_cut = df[mask].copy().sort_values("zHD").reset_index(drop=True)
+
+        return (
+            cast(np.ndarray, df_cut["zHD"].values.astype(np.float64)),
+            cast(np.ndarray, df_cut["MU_SH0ES"].values.astype(np.float64)),
+            cast(np.ndarray, df_cut["MU_SH0ES_ERR_DIAG"].values.astype(np.float64)),
+            df_cut,
+        )
 
     def _load_covariance(self, cov_file: Path, n_sn: int) -> np.ndarray:
         """Load covariance matrix from file."""
@@ -196,12 +240,14 @@ class PantheonPlusLoader:
             n = int(f.readline().strip())
             values = np.array([float(x) for x in f.read().split()])
 
-        cov = values.reshape(n, n)
+        cov = cast(np.ndarray, values.reshape(n, n))
 
         # Subset if needed (after redshift cuts)
         if n != n_sn:
-            warnings.warn(f"Covariance matrix size ({n}) doesn't match dataset ({n_sn})")
-            return None
+            warnings.warn(
+                f"Covariance matrix size ({n}) doesn't match dataset ({n_sn})", stacklevel=2
+            )
+            raise ValueError("Covariance subsetting after cuts is not implemented")
 
         return cov
 
@@ -223,7 +269,7 @@ class SimulatedDataLoader:
     def generate(
         self,
         n_sn: int = 1000,
-        z_range: Tuple[float, float] = (0.01, 1.5),
+        z_range: tuple[float, float] = (0.01, 1.5),
         include_evolution: bool = False,
         dM_dz: float = 0.0,
         dx1_dz: float = 0.0,
@@ -270,8 +316,6 @@ class SimulatedDataLoader:
 
         # True cosmology
         Om = 0.3
-        w0 = -1.0
-        wa = 0.0
         H0 = 70.0
 
         # Distance modulus (flat ΛCDM approximation)
@@ -315,7 +359,7 @@ class SimulatedDataLoader:
         )
 
 
-def split_by_host_mass(dataset: SNDataset, threshold: float = 10.0) -> Tuple[SNDataset, SNDataset]:
+def split_by_host_mass(dataset: SNDataset, threshold: float = 10.0) -> tuple[SNDataset, SNDataset]:
     """
     Split dataset by host galaxy stellar mass.
 
@@ -342,7 +386,7 @@ def split_by_host_mass(dataset: SNDataset, threshold: float = 10.0) -> Tuple[SND
     return low_mass, high_mass
 
 
-def split_by_redshift(dataset: SNDataset, z_split: float = 0.5) -> Tuple[SNDataset, SNDataset]:
+def split_by_redshift(dataset: SNDataset, z_split: float = 0.5) -> tuple[SNDataset, SNDataset]:
     """
     Split dataset by redshift.
 
